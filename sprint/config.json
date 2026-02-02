@@ -1,0 +1,16 @@
+{
+  "sprintLength": 10,
+  "hoursPerDay": 8,
+  "storyPointsPerPersonDay": 1,
+  "complexityMapping": {
+    "Simple": 1,
+    "Medium": 3,
+    "Complex": 5
+  },
+  "projectPrefixes": {
+    "rockapedia": "ROCK",
+    "glir": "GLIR",
+    "stratigraphy": "STRAT",
+    "gor": "GOR"
+  }
+}
