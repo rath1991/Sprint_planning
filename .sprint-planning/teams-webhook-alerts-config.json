@@ -1,0 +1,37 @@
+{
+  "enabled": true,
+  "webhooks": {
+    "rockapedia": {
+      "url": "https://outlook.office.com/webhook/YOUR_ROCKAPEDIA_WEBHOOK_URL",
+      "channel": "#rockapedia-sprint",
+      "enabled": true
+    },
+    "glir": {
+      "url": "https://outlook.office.com/webhook/YOUR_GLIR_WEBHOOK_URL",
+      "channel": "#glir-sprint",
+      "enabled": true
+    },
+    "stratigraphy": {
+      "url": "https://outlook.office.com/webhook/YOUR_STRATIGRAPHY_WEBHOOK_URL",
+      "channel": "#stratigraphy-sprint",
+      "enabled": true
+    },
+    "gor": {
+      "url": "https://outlook.office.com/webhook/YOUR_GOR_WEBHOOK_URL",
+      "channel": "#gor-sprint",
+      "enabled": true
+    }
+  },
+  "summary_webhook": {
+    "url": "https://outlook.office.com/webhook/YOUR_SUMMARY_WEBHOOK_URL",
+    "channel": "#sprint-planning",
+    "enabled": true
+  },
+  "notification_settings": {
+    "include_metrics": true,
+    "include_top_stories": true,
+    "include_team_workload": true,
+    "include_blockers": true,
+    "max_stories_in_notification": 5
+  }
+}

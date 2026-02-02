@@ -140,6 +140,59 @@ Break each story into tasks based on action items and @tagged persons.
 | `task_breakdown.md` | Tasks with hours and assignees |
 | `sprint_summary.md` | Capacity utilization report |
 
+## 6. Notify Teams Channels via Webhooks
+**Config:** `.sprint-planning/teams-webhook-alerts-config.json`
+
+After generating outputs, send notifications to Teams channels.
+
+**Extract metrics from output files:**
+```
+Total Stories: Count "## {ID}:" patterns in user_stories.md
+Total SP: Sum "**Story Points:** X SP" values
+Total Tasks: Count "| {ID}-T" rows in task_breakdown.md
+Total Hours: Sum hours column in task_breakdown.md
+High Priority: Count "**Priority:** High" occurrences
+Blockers: Find "**Blocked By:**" (non-None) and "⚠️" warnings
+```
+
+**Build Teams message payload:**
+```json
+{
+  "@type": "MessageCard",
+  "@context": "http://schema.org/extensions",
+  "themeColor": "0076D7",
+  "summary": "Sprint 23 Planning - {Project}",
+  "sections": [{
+    "activityTitle": "🚀 Sprint 23 - {Project} Planning Complete",
+    "facts": [
+      {"name": "Stories", "value": "{count}"},
+      {"name": "Story Points", "value": "{sp} SP"},
+      {"name": "Tasks", "value": "{tasks}"},
+      {"name": "Hours", "value": "{hours}h"},
+      {"name": "High Priority", "value": "{high_count}"},
+      {"name": "Capacity Used", "value": "{utilization}%"}
+    ],
+    "markdown": true
+  }]
+}
+```
+
+**Send notification:**
+```bash
+curl -H "Content-Type: application/json" -d @payload.json {webhook_url}
+```
+
+**Per-project notification includes:**
+- Sprint metrics summary
+- Top 5 stories (ID, title, SP, priority)
+- Team workload (member, assigned SP, hours, utilization %)
+- Blockers and warnings (⚠️ items)
+
+**Summary notification to #sprint-planning:**
+- Cross-project totals
+- Capacity utilization per project
+- Overall team allocation
+
 ## Quick Reference
 
 **Story Points:**
