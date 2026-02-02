@@ -38,6 +38,16 @@ Action Items:
 ## 2. Calculate Team Capacity
 **Inputs:** `capacity.csv`, `holidays.csv`
 
+**CSV Format (capacity by member AND project):**
+```csv
+Member,Role,Project,WorkingDays,PTO,Holidays,Meetings,AvailableDays,AvailableHours,StoryPoints
+@john.smith,Developer,Rockapedia,10,0,1,1,8,64,8
+@john.smith,Developer,GLIR,10,0,1,1,8,64,8
+@jane.doe,Developer,Rockapedia,10,2,1,1,6,48,6
+```
+
+**Key:** Members can work on multiple projects - each row is a member-project assignment.
+
 **Formula (1 SP = 1 person day = 8 hours):**
 ```
 AvailableDays = WorkingDays - PTO - Holidays - Meetings
@@ -45,13 +55,15 @@ AvailableHours = AvailableDays × 8
 StoryPoints = AvailableDays × 1 (1 SP per available day)
 ```
 
-**Capacity output per member:**
-| Member | Available Days | Available Hours | Story Points |
-|--------|----------------|-----------------|--------------|
-| @john.smith | 8 | 64 | 8 SP |
-| @jane.doe | 7 | 56 | 7 SP |
+**Capacity output per project:**
+| Project | Member | Role | Available Hours | Story Points |
+|---------|--------|------|-----------------|--------------|
+| Rockapedia | @john.smith | Developer | 64 | 8 SP |
+| Rockapedia | @jane.doe | Developer | 48 | 6 SP |
+| Rockapedia | @bob.wilson | QA | 56 | 7 SP |
+| **Rockapedia Total** | | | **168** | **21 SP** |
 
-**Total Team Capacity** = Sum of all members' SP
+**Per-Project Capacity** = Sum of members assigned to that project
 
 ## 3. Generate User Stories
 For each Story Idea in action_items.md:
@@ -115,8 +127,9 @@ Break each story into tasks based on action items and @tagged persons.
 **Validation checklist:**
 - [ ] Story hours = Story Points × 8
 - [ ] All tasks 2-16 hours
-- [ ] Total assigned ≤ Team capacity
-- [ ] Each @tagged person has tasks
+- [ ] Total assigned per project ≤ Project capacity
+- [ ] @tagged person is assigned to that project in capacity.csv
+- [ ] Each @tagged person has tasks within their available hours
 - [ ] Success criteria defined for each story
 
 **Generate outputs to** `sprint/sprint-{N}/{project}/outputs/`:
@@ -140,7 +153,11 @@ Break each story into tasks based on action items and @tagged persons.
 ```
 1 Story Point = 1 Person Day = 8 Hours
 Member Capacity (SP) = Available Days after PTO/Holidays/Meetings
+Project Capacity = Sum of all members assigned to project
 ```
+
+**Capacity CSV columns:**
+`Member, Role, Project, WorkingDays, PTO, Holidays, Meetings, AvailableDays, AvailableHours, StoryPoints`
 
 **Epic → Project mapping:**
 - Epic: Rockapedia → ROCK-XX-XXX
