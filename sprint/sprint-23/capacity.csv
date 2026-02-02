@@ -1,6 +1,6 @@
-Member,Role,WorkingDays,PTO,Meetings,AvailableDays,AvailableHours,StoryPoints
-John Smith,Developer,10,0,1,9,72,9
-Jane Doe,Developer,10,2,1,7,56,7
-Bob Wilson,QA,10,0,2,8,64,8
-Alice Chen,Developer,10,1,1,8,64,8
-Mike Johnson,Tech Lead,10,0,3,7,56,7
+Member,Role,WorkingDays,PTO,Holidays,Meetings,AvailableDays,AvailableHours,StoryPoints
+@john.smith,Developer,10,0,1,1,8,64,8
+@jane.doe,Developer,10,2,1,1,6,48,6
+@bob.wilson,QA,10,0,1,2,7,56,7
+@alice.chen,Developer,10,1,1,1,7,56,7
+@mike.johnson,Tech Lead,10,0,1,3,6,48,6
