@@ -1,7 +1,7 @@
 #!/bin/bash
-# Teams Webhook Notification Script for Sprint Planning
+# Teams Workflow Notification Script for Sprint Planning
 # Usage: ./send-teams-notification.sh <project> <sprint_number>
-# Sends full sprint content (stories, tasks, assignments) to Teams
+# Sends full sprint content via Power Automate Workflow (Adaptive Cards)
 
 set -e
 
@@ -66,6 +66,7 @@ fi
 
 if [ "$WEBHOOK_URL" == "null" ] || [[ "$WEBHOOK_URL" == *"YOUR_"* ]]; then
     echo "Error: Webhook URL not configured for project: $PROJECT"
+    echo "   Please update .sprint-planning/teams-webhook-alerts-config.json with your workflow URL"
     exit 1
 fi
 
@@ -88,25 +89,14 @@ HIGH_PRIORITY=$(grep -c "\*\*Priority:\*\* High" "$USER_STORIES_FILE" 2>/dev/nul
 BLOCKERS=$(grep -c "Blocked By:\*\* [^N]" "$USER_STORIES_FILE" 2>/dev/null || echo "0")
 
 # ============================================
-# EXTRACT USER STORIES CONTENT
+# EXTRACT USER STORIES
 # ============================================
 echo "📋 Extracting user stories..."
 
-STORIES_CONTENT=""
-while IFS= read -r line; do
-    if [[ "$line" =~ ^##[[:space:]]([A-Z]+-[0-9]+-[0-9]+):(.*)$ ]]; then
-        STORY_ID="${BASH_REMATCH[1]}"
-        STORY_TITLE="${BASH_REMATCH[2]}"
-        STORIES_CONTENT="${STORIES_CONTENT}**${STORY_ID}:** ${STORY_TITLE}  \\n"
-    fi
-done < "$USER_STORIES_FILE"
-
-# Add story details (SP, Priority)
-STORIES_LIST=""
+STORIES_TEXT=""
 while IFS= read -r story_line; do
     STORY_ID=$(echo "$story_line" | grep -oE "^[A-Z]+-[0-9]+-[0-9]+")
     if [ -n "$STORY_ID" ]; then
-        # Extract details for this story
         SP=$(grep -A5 "## ${STORY_ID}:" "$USER_STORIES_FILE" | grep -oE "Story Points:\*\* [0-9]+" | grep -oE "[0-9]+" || echo "?")
         PRIORITY=$(grep -A5 "## ${STORY_ID}:" "$USER_STORIES_FILE" | grep -oE "Priority:\*\* [A-Za-z]+" | sed 's/Priority:\*\* //' || echo "?")
         TITLE=$(echo "$story_line" | sed "s/^${STORY_ID}: //")
@@ -116,31 +106,28 @@ while IFS= read -r story_line; do
         [[ "$PRIORITY" == "Medium" ]] && PRIORITY_ICON="🟡"
         [[ "$PRIORITY" == "Low" ]] && PRIORITY_ICON="🟢"
 
-        STORIES_LIST="${STORIES_LIST}${PRIORITY_ICON} **${STORY_ID}** (${SP} SP) - ${TITLE}  \\n\\n"
+        STORIES_TEXT="${STORIES_TEXT}${PRIORITY_ICON} **${STORY_ID}** (${SP} SP) - ${TITLE}\n\n"
     fi
 done <<< "$(grep -oE "^## [A-Z]+-[0-9]+-[0-9]+:.*" "$USER_STORIES_FILE" | sed 's/## //')"
 
 # ============================================
-# EXTRACT TASKS CONTENT
+# EXTRACT TASKS
 # ============================================
 echo "✅ Extracting tasks..."
 
-TASKS_CONTENT=""
+TASKS_TEXT=""
 CURRENT_STORY=""
 while IFS= read -r line; do
-    # Check for story header
     if [[ "$line" =~ ^##[[:space:]]([A-Z]+-[0-9]+-[0-9]+): ]]; then
         CURRENT_STORY="${BASH_REMATCH[1]}"
-        TASKS_CONTENT="${TASKS_CONTENT}\\n**${CURRENT_STORY}**\\n"
+        TASKS_TEXT="${TASKS_TEXT}\n**${CURRENT_STORY}**\n"
     fi
-    # Check for task row
     if [[ "$line" =~ ^\|[[:space:]]([A-Z]+-[0-9]+-[0-9]+-T[0-9]+) ]]; then
         TASK_ID="${BASH_REMATCH[1]}"
-        # Extract task details from the row
         TASK_DESC=$(echo "$line" | awk -F'|' '{print $3}' | xargs)
         TASK_HOURS=$(echo "$line" | awk -F'|' '{print $4}' | xargs)
         TASK_ASSIGNEE=$(echo "$line" | awk -F'|' '{print $5}' | xargs)
-        TASKS_CONTENT="${TASKS_CONTENT}  • ${TASK_ID}: ${TASK_DESC} (${TASK_HOURS}h) → ${TASK_ASSIGNEE}\\n"
+        TASKS_TEXT="${TASKS_TEXT}  • ${TASK_ID}: ${TASK_DESC} (${TASK_HOURS}h) → ${TASK_ASSIGNEE}\n"
     fi
 done < "$TASK_BREAKDOWN_FILE"
 
@@ -149,77 +136,158 @@ done < "$TASK_BREAKDOWN_FILE"
 # ============================================
 echo "👥 Extracting team assignments..."
 
-TEAM_CONTENT=""
+TEAM_TEXT=""
 if [ -f "$TEAM_ASSIGNMENTS_FILE" ]; then
-    # Extract summary table rows
     while IFS= read -r line; do
         if [[ "$line" =~ ^\|[[:space:]]@([a-zA-Z._-]+) ]]; then
             MEMBER="@${BASH_REMATCH[1]}"
             ASSIGNED=$(echo "$line" | awk -F'|' '{print $4}' | xargs)
             CAPACITY=$(echo "$line" | awk -F'|' '{print $3}' | xargs)
-            HOURS=$(echo "$line" | awk -F'|' '{print $5}' | xargs)
             UTIL=$(echo "$line" | awk -F'|' '{print $6}' | xargs)
-            TEAM_CONTENT="${TEAM_CONTENT}• **${MEMBER}**: ${ASSIGNED} / ${CAPACITY} (${UTIL})\\n"
+            TEAM_TEXT="${TEAM_TEXT}• **${MEMBER}**: ${ASSIGNED} / ${CAPACITY} (${UTIL})\n"
         fi
     done < "$TEAM_ASSIGNMENTS_FILE"
 fi
 
 # ============================================
-# EXTRACT SPRINT SUMMARY (if exists)
+# BUILD ADAPTIVE CARD PAYLOAD
 # ============================================
-SUMMARY_CONTENT=""
-if [ -f "$SPRINT_SUMMARY_FILE" ]; then
-    echo "📈 Extracting sprint summary..."
-    SUMMARY_CONTENT=$(cat "$SPRINT_SUMMARY_FILE" | head -50 | sed 's/"/\\"/g' | sed ':a;N;$!ba;s/\n/\\n/g')
-fi
-
-# ============================================
-# BUILD PAYLOAD
-# ============================================
-echo "📦 Building notification payload..."
-
-# Escape special characters for JSON
-escape_json() {
-    echo "$1" | sed 's/\\/\\\\/g' | sed 's/"/\\"/g' | sed "s/'/\\'/g"
-}
-
-STORIES_LIST_ESCAPED=$(escape_json "$STORIES_LIST")
-TASKS_CONTENT_ESCAPED=$(escape_json "$TASKS_CONTENT")
-TEAM_CONTENT_ESCAPED=$(escape_json "$TEAM_CONTENT")
+echo "📦 Building Adaptive Card payload..."
 
 PROJECT_UPPER=$(echo "${PROJECT}" | awk '{print toupper(substr($0,1,1)) tolower(substr($0,2))}')
 
+# Escape for JSON
+escape_json() {
+    printf '%s' "$1" | python3 -c 'import json,sys; print(json.dumps(sys.stdin.read()))'  | sed 's/^"//;s/"$//'
+}
+
+STORIES_ESCAPED=$(escape_json "$STORIES_TEXT")
+TASKS_ESCAPED=$(escape_json "$TASKS_TEXT")
+TEAM_ESCAPED=$(escape_json "$TEAM_TEXT")
+
+# Adaptive Card payload for Power Automate Workflow
 PAYLOAD=$(cat <<EOF
 {
-  "@type": "MessageCard",
-  "@context": "http://schema.org/extensions",
-  "themeColor": "0076D7",
-  "summary": "Sprint ${SPRINT} Planning - ${PROJECT_UPPER}",
-  "sections": [
+  "type": "message",
+  "attachments": [
     {
-      "activityTitle": "🚀 Sprint ${SPRINT} - ${PROJECT_UPPER}",
-      "activitySubtitle": "Approved by ${APPROVED_BY} on ${APPROVED_AT}",
-      "facts": [
-        {"name": "📋 Stories", "value": "${STORY_COUNT}"},
-        {"name": "📊 Story Points", "value": "${TOTAL_SP} SP"},
-        {"name": "✅ Tasks", "value": "${TASK_COUNT}"},
-        {"name": "⏱️ Total Hours", "value": "${TOTAL_HOURS}h"},
-        {"name": "🔥 High Priority", "value": "${HIGH_PRIORITY}"},
-        {"name": "🚧 Blockers", "value": "${BLOCKERS}"}
-      ],
-      "markdown": true
-    },
-    {
-      "activityTitle": "📋 User Stories",
-      "text": "${STORIES_LIST_ESCAPED}"
-    },
-    {
-      "activityTitle": "✅ Task Breakdown",
-      "text": "${TASKS_CONTENT_ESCAPED}"
-    },
-    {
-      "activityTitle": "👥 Team Assignments",
-      "text": "${TEAM_CONTENT_ESCAPED}"
+      "contentType": "application/vnd.microsoft.card.adaptive",
+      "contentUrl": null,
+      "content": {
+        "\$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+        "type": "AdaptiveCard",
+        "version": "1.4",
+        "body": [
+          {
+            "type": "TextBlock",
+            "size": "Large",
+            "weight": "Bolder",
+            "text": "🚀 Sprint ${SPRINT} - ${PROJECT_UPPER}",
+            "wrap": true,
+            "style": "heading"
+          },
+          {
+            "type": "TextBlock",
+            "text": "Approved by ${APPROVED_BY} on ${APPROVED_AT}",
+            "isSubtle": true,
+            "wrap": true
+          },
+          {
+            "type": "ColumnSet",
+            "columns": [
+              {
+                "type": "Column",
+                "width": "stretch",
+                "items": [
+                  {"type": "TextBlock", "text": "📋 Stories", "weight": "Bolder"},
+                  {"type": "TextBlock", "text": "${STORY_COUNT}", "size": "ExtraLarge", "color": "Accent"}
+                ]
+              },
+              {
+                "type": "Column",
+                "width": "stretch",
+                "items": [
+                  {"type": "TextBlock", "text": "📊 Story Points", "weight": "Bolder"},
+                  {"type": "TextBlock", "text": "${TOTAL_SP} SP", "size": "ExtraLarge", "color": "Accent"}
+                ]
+              },
+              {
+                "type": "Column",
+                "width": "stretch",
+                "items": [
+                  {"type": "TextBlock", "text": "✅ Tasks", "weight": "Bolder"},
+                  {"type": "TextBlock", "text": "${TASK_COUNT}", "size": "ExtraLarge", "color": "Accent"}
+                ]
+              },
+              {
+                "type": "Column",
+                "width": "stretch",
+                "items": [
+                  {"type": "TextBlock", "text": "⏱️ Hours", "weight": "Bolder"},
+                  {"type": "TextBlock", "text": "${TOTAL_HOURS}h", "size": "ExtraLarge", "color": "Accent"}
+                ]
+              }
+            ]
+          },
+          {
+            "type": "TextBlock",
+            "text": "🔥 High Priority: ${HIGH_PRIORITY} | 🚧 Blockers: ${BLOCKERS}",
+            "wrap": true,
+            "spacing": "Medium"
+          },
+          {
+            "type": "Container",
+            "style": "emphasis",
+            "items": [
+              {
+                "type": "TextBlock",
+                "text": "📋 User Stories",
+                "weight": "Bolder",
+                "size": "Medium"
+              },
+              {
+                "type": "TextBlock",
+                "text": "${STORIES_ESCAPED}",
+                "wrap": true
+              }
+            ]
+          },
+          {
+            "type": "Container",
+            "style": "emphasis",
+            "items": [
+              {
+                "type": "TextBlock",
+                "text": "✅ Task Breakdown",
+                "weight": "Bolder",
+                "size": "Medium"
+              },
+              {
+                "type": "TextBlock",
+                "text": "${TASKS_ESCAPED}",
+                "wrap": true
+              }
+            ]
+          },
+          {
+            "type": "Container",
+            "style": "emphasis",
+            "items": [
+              {
+                "type": "TextBlock",
+                "text": "👥 Team Assignments",
+                "weight": "Bolder",
+                "size": "Medium"
+              },
+              {
+                "type": "TextBlock",
+                "text": "${TEAM_ESCAPED}",
+                "wrap": true
+              }
+            ]
+          }
+        ]
+      }
     }
   ]
 }
@@ -227,14 +295,19 @@ EOF
 )
 
 # ============================================
-# SEND TO TEAMS
+# SEND TO TEAMS WORKFLOW
 # ============================================
-echo "📤 Sending notification to Teams..."
+echo "📤 Sending to Teams Workflow..."
 
-RESPONSE=$(curl -s -w "%{http_code}" -H "Content-Type: application/json" -d "$PAYLOAD" "$WEBHOOK_URL")
-HTTP_CODE="${RESPONSE: -3}"
+RESPONSE=$(curl -s -w "\n%{http_code}" -X POST \
+    -H "Content-Type: application/json" \
+    -d "$PAYLOAD" \
+    "$WEBHOOK_URL")
 
-if [ "$HTTP_CODE" == "200" ] || [ "$HTTP_CODE" == "202" ]; then
+HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
+BODY=$(echo "$RESPONSE" | sed '$d')
+
+if [ "$HTTP_CODE" == "200" ] || [ "$HTTP_CODE" == "202" ] || [ "$HTTP_CODE" == "204" ]; then
     echo ""
     echo "✅ Notification sent successfully to ${PROJECT} channel!"
     echo ""
@@ -244,6 +317,6 @@ if [ "$HTTP_CODE" == "200" ] || [ "$HTTP_CODE" == "202" ]; then
     echo "  • ${HIGH_PRIORITY} high priority"
 else
     echo "❌ Failed to send notification. HTTP code: $HTTP_CODE"
-    echo "Response: ${RESPONSE:0:-3}"
+    echo "Response: $BODY"
     exit 1
 fi
