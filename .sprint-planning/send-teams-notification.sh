@@ -33,6 +33,25 @@ if [ ! -d "$OUTPUT_DIR" ]; then
     exit 1
 fi
 
+# Check for approval (Phase 6 must be complete)
+APPROVAL_FILE="${OUTPUT_DIR}/approval.md"
+if [ ! -f "$APPROVAL_FILE" ]; then
+    echo "❌ Error: Sprint plan not approved yet."
+    echo "   Missing: $APPROVAL_FILE"
+    echo "   Please complete Phase 6 (Human Review & Approval) before sending notifications."
+    exit 1
+fi
+
+# Verify approval status
+APPROVAL_STATUS=$(grep -oE "Status: [A-Z]+" "$APPROVAL_FILE" 2>/dev/null | cut -d' ' -f2 || echo "UNKNOWN")
+if [ "$APPROVAL_STATUS" != "APPROVED" ]; then
+    echo "❌ Error: Sprint plan status is '$APPROVAL_STATUS', not APPROVED."
+    echo "   Please approve the sprint plan before sending notifications."
+    exit 1
+fi
+
+echo "✅ Approval verified: $(grep 'Approved by:' "$APPROVAL_FILE")"
+
 # Get webhook URL for project
 WEBHOOK_URL=$(jq -r ".webhooks.${PROJECT}.url" "$CONFIG_FILE")
 ENABLED=$(jq -r ".webhooks.${PROJECT}.enabled" "$CONFIG_FILE")

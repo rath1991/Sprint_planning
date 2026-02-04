@@ -140,10 +140,69 @@ Break each story into tasks based on action items and @tagged persons.
 | `task_breakdown.md` | Tasks with hours and assignees |
 | `sprint_summary.md` | Capacity utilization report |
 
-## 6. Notify Teams Channels via Webhooks
+## 6. Human Review & Approval
+**STOP** - Do not proceed to notifications until human approval.
+
+After generating outputs, present a summary for review:
+
+**Display review summary:**
+```markdown
+## 📋 Sprint {N} Planning Review - {Project}
+
+### Metrics
+| Metric | Value |
+|--------|-------|
+| Stories | {count} |
+| Story Points | {sp} SP |
+| Tasks | {tasks} |
+| Total Hours | {hours}h |
+| Capacity Used | {utilization}% |
+
+### Stories for Review
+| ID | Title | SP | Priority | Assignees |
+|----|-------|-----|----------|-----------|
+| ROCK-23-001 | Story title | 3 | High | @john, @jane |
+
+### Capacity Allocation
+| Member | Assigned | Capacity | Utilization |
+|--------|----------|----------|-------------|
+| @john.smith | 40h | 64h | 63% |
+
+### ⚠️ Warnings
+- Over-allocated members
+- Blocked stories
+- Missing assignees
+```
+
+**Prompt user for action:**
+- **Approve** → Proceed to Teams notification (Phase 7)
+- **Modify** → User specifies changes (adjust SP, reassign tasks, etc.)
+- **Reject** → Discard and regenerate with feedback
+
+**Review checklist (human verifies):**
+- [ ] Story points reflect actual complexity
+- [ ] Task assignments are balanced
+- [ ] No team member is over-allocated
+- [ ] Dependencies are correctly identified
+- [ ] Success criteria are complete and testable
+- [ ] Priority ordering is correct
+
+**On Modify:** Apply user's changes to output files, re-validate, present updated summary.
+
+**On Approve:** Create approval record:
+```markdown
+# sprint/sprint-{N}/{project}/outputs/approval.md
+Approved by: {user}
+Approved at: {timestamp}
+Status: APPROVED
+```
+
+## 7. Notify Teams Channels via Webhooks
 **Config:** `.sprint-planning/teams-webhook-alerts-config.json`
 
-After generating outputs, send notifications to Teams channels.
+**Prerequisite:** Phase 6 approval must be complete. Check for `approval.md` file.
+
+After approval, send notifications to Teams channels.
 
 **Extract metrics from output files:**
 ```
